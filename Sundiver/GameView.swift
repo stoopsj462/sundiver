@@ -261,6 +261,12 @@ struct HUD: View {
             Text("\(model.score)")
                 .foregroundColor(.white)
                 .font(.system(size: 54, weight: .black))
+            if model.startCountdown > 0 {
+                Text("GET READY")
+                    .foregroundColor(model.shipColor.opacity(0.75 + 0.25 * sin(model.time * 8)))
+                    .font(.system(size: 18, weight: .bold))
+                    .padding(.top, 8)
+            }
             Spacer()
         }
         .padding(.top, 24)

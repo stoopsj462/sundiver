@@ -89,6 +89,9 @@ final class GameModel: ObservableObject {
     @Published var shipAngle: Double = 0
     @Published var shieldActive: Bool = false
 
+    /// Seconds remaining before the sundiver starts moving after a run begins.
+    @Published var startCountdown: Double = 0
+
     @Published var items: [TrackItem] = []
     @Published var particles: [Particle] = []
     @Published var backgroundStars: [BackgroundStar] = []
@@ -102,6 +105,7 @@ final class GameModel: ObservableObject {
     private let maxAngularSpeedBoost = 1.55
     private let shipPixelRadius: CGFloat = 9
     private let lookahead = 3.6
+    private let startDelay = 1.5
     private var nextSpawnAngle: [Double] = [0.9, 1.6]
 
     private let defaults = UserDefaults.standard
@@ -209,7 +213,11 @@ final class GameModel: ObservableObject {
         items = []
         particles = []
         nextSpawnAngle = [0.9, 1.6]
+        startCountdown = startDelay
         phase = .playing
+        // Fill the visible track up front so the player can read the first
+        // hazards while the ship is still held in place.
+        spawnIfNeeded()
     }
 
     private func endGame() {
@@ -234,6 +242,13 @@ final class GameModel: ObservableObject {
         updateParticles(clampedDt)
 
         guard phase == .playing, size.width > 0 else { return }
+
+        // Hold the ship still for a beat at the start of a run so the player
+        // has time to react before the dive begins.
+        if startCountdown > 0 {
+            startCountdown = max(0, startCountdown - clampedDt)
+            return
+        }
 
         let speed = baseAngularSpeed + min(shipAngle * 0.006, maxAngularSpeedBoost)
         shipAngle += speed * clampedDt
