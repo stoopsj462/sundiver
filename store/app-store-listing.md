@@ -61,25 +61,24 @@ How close can you get before the sun wins?
 > (Settings → Pages → main → /docs). Same outstanding step as orbitor-game/plaingame.
 
 ## Screenshots
-> Pending re-capture for v1.1 — the menu, shop, and HUD were redesigned (difficulty
-> picker, pulse orb button, Ember Shop grid), so the existing PNGs in
-> `store/screenshots/appstore/` are stale and need to be replaced before this update
-> is submitted.
+Re-captured for v1.1 to reflect the redesigned menu, shop, and HUD (difficulty picker,
+pulse orb button, Ember Shop grid).
 
 Captured from simulators, then resized to the exact pixel sizes App Store Connect's
 screenshot uploader actually asks for on this account (no alpha channel, flattened):
 
 | Device | Size (px) | Simulator used | Notes |
 |---|---|---|---|
-| iPhone (6.5" slot) | 1284 × 2778 | iPhone 17 Pro Max, native 1320×2868, resized down | ASC asked for 1242×2688/2688×1242/1284×2778/2778×1284 — same slot Orbitor uses |
+| iPhone (6.5" slot) | 1284 × 2778 | iPhone 18 Pro Max, resized down to match ASC's slot | ASC asked for 1242×2688/2688×1242/1284×2778/2778×1284 — same slot Orbitor uses |
 | iPad 13" slot | 2064 × 2752 | iPad Pro 13-inch (M5), native resolution, no resize needed | |
 
-Captured with a fresh app install and a short delay before each shot to avoid the
-simulator's occasional system notification banner sneaking into frame — check any
-newly captured screenshot for that before uploading.
+Captured with a short delay before each shot to avoid the simulator's occasional
+system notification banner sneaking into frame — check any newly captured screenshot
+for that before uploading.
 
-Four shots per device, in `store/screenshots/appstore/`: **menu**, **mid-run gameplay**,
-**game over / new best**, **the shop**.
+Five shots per device, in `store/screenshots/appstore/`: **menu**, **mid-run gameplay**,
+**game over / new best**, **the shop**, and **the difficulty picker** (Extreme selected,
+showing the asymmetric-lane callout).
 
 ## Bundle / App record (already done via API, 2026-09-15)
 - Bundle ID `com.jasonstoops.sundiver` registered (Developer Portal, id `HPPPC42LX3`).
