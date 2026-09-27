@@ -8,7 +8,11 @@ import SwiftUI
 struct GameView: View {
     @StateObject private var model = GameModel()
     @State private var showShop = false
+    @State private var showReset = false
     @State private var lastTimestamp: Date?
+
+    /// True while a modal owns the screen, so a stray tap can't start a run behind it.
+    private var isModalUp: Bool { showShop || showReset }
 
     private let spaceTop = Color(red: 0.02, green: 0.02, blue: 0.06)
     private let spaceBottom = Color(red: 0.01, green: 0.01, blue: 0.02)
@@ -36,14 +40,26 @@ struct GameView: View {
             }
             .ignoresSafeArea()
 
-            GameOverlay(model: model, gold: emberColor, cyan: cyan, danger: flareColor, onOpenShop: { showShop = true })
+            GameOverlay(
+                model: model,
+                gold: emberColor,
+                cyan: cyan,
+                danger: flareColor,
+                onOpenShop: { showShop = true },
+                onStartOver: { showReset = true }
+            )
+
+            if showShop {
+                ShopView(model: model, isPresented: $showShop)
+            }
+
+            if showReset {
+                ResetConfirm(model: model, danger: flareColor, isPresented: $showReset)
+            }
         }
         .contentShape(Rectangle())
         .onTapGesture {
-            if !showShop { model.handleTap() }
-        }
-        .sheet(isPresented: $showShop) {
-            ShopView(model: model)
+            if !isModalUp { model.handleTap() }
         }
         .preferredColorScheme(.dark)
         .statusBarHidden(true)
@@ -63,18 +79,48 @@ struct GameView: View {
         drawSun(&context)
         drawItems(&context)
         drawShip(&context)
+        drawShockwaves(&context)
         drawParticles(&context)
+    }
+
+    private func drawShockwaves(_ context: inout GraphicsContext) {
+        for wave in model.shockwaves {
+            let t = min(1, wave.age / wave.duration)
+            let radius = 12 + t * 78
+            let rect = CGRect(x: wave.pos.x - radius, y: wave.pos.y - radius,
+                              width: radius * 2, height: radius * 2)
+            context.stroke(Path(ellipseIn: rect),
+                           with: .color(wave.color.opacity((1 - t) * 0.85)),
+                           lineWidth: 3 * (1 - t) + 1)
+        }
     }
 
     private func drawBackgroundStars(_ context: inout GraphicsContext) {
         let center = model.center
         let drift = model.time * 0.015
+        let theme = model.activeStarfieldTheme
         for star in model.backgroundStars {
             let a = star.angle + drift
             let p = CGPoint(x: center.x + cos(a) * star.radius, y: center.y + sin(a) * star.radius)
             let twinkle = 0.6 + 0.4 * sin(model.time * 2 + star.angle * 5)
             let rect = CGRect(x: p.x - star.size / 2, y: p.y - star.size / 2, width: star.size, height: star.size)
-            context.fill(Path(ellipseIn: rect), with: .color(.white.opacity(star.alpha * twinkle)))
+            let color = starColor(theme: theme, star: star)
+            context.fill(Path(ellipseIn: rect), with: .color(color.opacity(star.alpha * twinkle)))
+        }
+    }
+
+    /// Resolves a star's color for the active theme. Palette themes key a fixed color
+    /// off the star's own `hueSeed` so it doesn't flicker between colors frame to
+    /// frame; the chromatic theme instead cycles hue continuously over time.
+    private func starColor(theme: StarfieldTheme, star: BackgroundStar) -> Color {
+        switch theme.style {
+        case .palette(let colors):
+            guard !colors.isEmpty else { return .white }
+            let index = min(colors.count - 1, Int(star.hueSeed * Double(colors.count)))
+            return colors[index]
+        case .chromatic:
+            let hue = (model.time * 0.05 + star.hueSeed).truncatingRemainder(dividingBy: 1.0)
+            return Color(hue: hue, saturation: 0.65, brightness: 1.0)
         }
     }
 
@@ -90,12 +136,25 @@ struct GameView: View {
         let center = model.center
         let base = model.minDimension * 0.14
         let pulse = base * (1 + 0.04 * sin(model.time * 1.6))
+        let theme = model.activeSunTheme
+
+        // "Prism Star" cycles its whole gradient through hue instead of using the
+        // theme's static core/mid/edge/glow colors.
+        let bodyColors: [Color]
+        let glowColor: Color
+        if theme.isPrismatic {
+            bodyColors = prismaticColors()
+            glowColor = bodyColors[0]
+        } else {
+            bodyColors = [theme.core, theme.mid, theme.edge]
+            glowColor = theme.glow
+        }
 
         let glowRect = CGRect(x: center.x - pulse * 1.9, y: center.y - pulse * 1.9, width: pulse * 3.8, height: pulse * 3.8)
         context.fill(
             Path(ellipseIn: glowRect),
             with: .radialGradient(
-                Gradient(colors: [Color.orange.opacity(0.35), .clear]),
+                Gradient(colors: [glowColor.opacity(0.35), .clear]),
                 center: center, startRadius: 0, endRadius: pulse * 1.9
             )
         )
@@ -104,15 +163,18 @@ struct GameView: View {
         context.fill(
             Path(ellipseIn: bodyRect),
             with: .radialGradient(
-                Gradient(colors: [
-                    Color(red: 1, green: 0.95, blue: 0.83),
-                    Color(red: 1, green: 0.58, blue: 0.16),
-                    Color(red: 0.77, green: 0.16, blue: 0.1)
-                ]),
+                Gradient(colors: bodyColors),
                 center: CGPoint(x: center.x - pulse * 0.3, y: center.y - pulse * 0.3),
                 startRadius: 0, endRadius: pulse * 1.3
             )
         )
+    }
+
+    private func prismaticColors() -> [Color] {
+        stride(from: 0.0, to: 3.0, by: 1.0).map { i in
+            Color(hue: (model.time * 0.08 + i / 3.0).truncatingRemainder(dividingBy: 1.0),
+                  saturation: 0.75, brightness: 1.0)
+        }
     }
 
     private func drawItems(_ context: inout GraphicsContext) {
@@ -127,6 +189,9 @@ struct GameView: View {
             case .shield:
                 let p = model.pointOnRing(item.angle, radius)
                 drawEmber(&context, at: p, color: cyan)
+            case .orb:
+                let p = model.pointOnRing(item.angle, radius)
+                drawOrb(&context, at: p)
             }
         }
     }
@@ -154,6 +219,26 @@ struct GameView: View {
         path.closeSubpath()
         context.fill(path, with: .color(color))
         context.fill(Path(ellipseIn: CGRect(x: p.x - 2, y: p.y - 2, width: 4, height: 4)), with: .color(.white))
+    }
+
+    /// A pulse orb: a violet core inside a slowly breathing ring, so it reads as a
+    /// held charge rather than another collectible.
+    private func drawOrb(_ context: inout GraphicsContext, at p: CGPoint) {
+        let color = GameModel.orbColor
+        let glowRect = CGRect(x: p.x - 18, y: p.y - 18, width: 36, height: 36)
+        context.fill(
+            Path(ellipseIn: glowRect),
+            with: .radialGradient(Gradient(colors: [color.opacity(0.75), .clear]),
+                                  center: p, startRadius: 0, endRadius: 18)
+        )
+
+        let pulse = 9 + 2 * sin(model.time * 4)
+        context.stroke(
+            Path(ellipseIn: CGRect(x: p.x - pulse, y: p.y - pulse, width: pulse * 2, height: pulse * 2)),
+            with: .color(color.opacity(0.9)), lineWidth: 2
+        )
+        context.fill(Path(ellipseIn: CGRect(x: p.x - 4, y: p.y - 4, width: 8, height: 8)),
+                     with: .color(.white))
     }
 
     private func drawShip(_ context: inout GraphicsContext) {
@@ -228,15 +313,18 @@ struct GameOverlay: View {
     let cyan: Color
     let danger: Color
     let onOpenShop: () -> Void
+    let onStartOver: () -> Void
 
     var body: some View {
         switch model.phase {
         case .playing:
             HUD(model: model, gold: gold)
         case .menu:
-            MenuOverlay(model: model, gold: gold, onOpenShop: onOpenShop)
+            MenuOverlay(model: model, gold: gold, danger: danger,
+                        onOpenShop: onOpenShop, onStartOver: onStartOver)
         case .gameOver:
-            GameOverOverlay(model: model, gold: gold, cyan: cyan, danger: danger, onOpenShop: onOpenShop)
+            GameOverOverlay(model: model, gold: gold, cyan: cyan, danger: danger,
+                            onOpenShop: onOpenShop)
         }
     }
 }
@@ -252,9 +340,14 @@ struct HUD: View {
                     .foregroundColor(gold)
                     .font(.system(size: 20, weight: .bold))
                 Spacer()
-                Text("BEST \(model.best)")
-                    .foregroundColor(.white.opacity(0.5))
-                    .font(.system(size: 14, weight: .semibold))
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(model.difficulty.name)
+                        .foregroundColor(model.difficulty.tint.opacity(0.9))
+                        .font(.system(size: 11, weight: .bold))
+                    Text("BEST \(model.best)")
+                        .foregroundColor(.white.opacity(0.5))
+                        .font(.system(size: 14, weight: .semibold))
+                }
             }
             .padding(.horizontal, 24)
             Spacer().frame(height: 16)
@@ -268,33 +361,76 @@ struct HUD: View {
                     .padding(.top, 8)
             }
             Spacer()
+            OrbButton(model: model)
+                .padding(.bottom, 28)
         }
         .padding(.top, 24)
+    }
+}
+
+/// Spends a pulse orb on the flare ahead. Always on screen during a run — dimmed at
+/// zero — so the player learns the escape exists before they need it.
+struct OrbButton: View {
+    @ObservedObject var model: GameModel
+
+    var body: some View {
+        let ready = model.orbCount > 0
+        let color = GameModel.orbColor
+
+        Button(action: { model.detonateOrb() }) {
+            HStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .stroke(color.opacity(ready ? 0.9 : 0.3), lineWidth: 2)
+                        .frame(width: 20, height: 20)
+                    Circle()
+                        .fill(ready ? Color.white : Color.white.opacity(0.3))
+                        .frame(width: 7, height: 7)
+                }
+                Text(ready ? "BLAST ×\(model.orbCount)" : "NO ORBS")
+                    .font(.system(size: 14, weight: .bold))
+            }
+            .foregroundColor(ready ? .white : .white.opacity(0.35))
+            .padding(.horizontal, 18)
+            .padding(.vertical, 11)
+            .background(Capsule().fill(color.opacity(ready ? 0.22 : 0.06)))
+            .overlay(Capsule().stroke(color.opacity(ready ? 0.7 : 0.15), lineWidth: 1))
+            .shadow(color: ready ? color.opacity(0.5) : .clear, radius: 10)
+        }
+        // Deliberately not `.disabled` — a disabled button would let the tap fall
+        // through to the background and flip rings, which is the last thing the
+        // player wants mid-dodge. `detonateOrb()` already no-ops at zero.
+        .buttonStyle(.plain)
     }
 }
 
 struct MenuOverlay: View {
     @ObservedObject var model: GameModel
     let gold: Color
+    let danger: Color
     let onOpenShop: () -> Void
+    let onStartOver: () -> Void
 
     var body: some View {
         Panel {
-            VStack(spacing: 16) {
+            VStack(spacing: 14) {
                 Text("SUNDIVER")
                     .foregroundColor(model.shipColor)
                     .font(.system(size: 52, weight: .black))
-                Text("Tap to dive between orbits.\nDodge the flares. Grab the embers.")
+                Text("Tap to dive between orbits.\nDodge the flares. Grab the embers.\nBlast a flare with a pulse orb when it gets tight.")
                     .foregroundColor(.white.opacity(0.75))
                     .font(.system(size: 16, weight: .medium))
                     .multilineTextAlignment(.center)
-                if model.best > 0 {
-                    Text("BEST  \(model.best)")
-                        .foregroundColor(gold)
-                        .font(.system(size: 16, weight: .bold))
-                }
+
+                DifficultyPicker(model: model, gold: gold)
+
                 SkinPicker(model: model)
                 ShopButton(balance: model.emberBalance, onClick: onOpenShop)
+
+                if model.hasProgress {
+                    StartOverButton(danger: danger, onClick: onStartOver)
+                }
+
                 StartPill(text: "TAP TO START", color: model.shipColor, time: model.time)
             }
         }
@@ -311,15 +447,14 @@ struct GameOverOverlay: View {
     var body: some View {
         Panel {
             VStack(spacing: 14) {
-                let isNewBest = model.score >= model.best && model.score > 0
-                Text(isNewBest ? "NEW BEST!" : "GAME OVER")
-                    .foregroundColor(isNewBest ? gold : danger)
+                Text(model.didSetNewBest ? "NEW BEST!" : "GAME OVER")
+                    .foregroundColor(model.didSetNewBest ? gold : danger)
                     .font(.system(size: 36, weight: .black))
 
                 HStack(spacing: 28) {
                     StatItem(title: "SCORE", value: "\(model.score)", color: .white)
                     StatItem(title: "EMBERS", value: "+\(model.emberCount)", color: gold)
-                    StatItem(title: "BEST", value: "\(model.best)", color: cyan)
+                    StatItem(title: "BEST", value: "\(model.lastRunBest)", color: cyan)
                 }
 
                 if let unlock = model.newlyUnlocked {
@@ -331,6 +466,8 @@ struct GameOverOverlay: View {
                         .background(unlock.color.opacity(0.16))
                         .clipShape(Capsule())
                 }
+
+                DifficultyRow(model: model)
 
                 SkinPicker(model: model)
                 ShopButton(balance: model.emberBalance, onClick: onOpenShop)
@@ -402,6 +539,158 @@ struct ShopButton: View {
                 .clipShape(Capsule())
                 .overlay(Capsule().stroke(.white.opacity(0.15), lineWidth: 1))
         }
+    }
+}
+
+/// Level pills plus a caption naming the record on the selected level.
+struct DifficultyPicker: View {
+    @ObservedObject var model: GameModel
+    let gold: Color
+
+    var body: some View {
+        VStack(spacing: 8) {
+            DifficultyRow(model: model)
+            Text(model.best > 0
+                 ? "\(model.difficulty.name) · BEST \(model.best)"
+                 : "\(model.difficulty.name) · no record yet")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(model.best > 0 ? gold : .white.opacity(0.5))
+
+            if model.difficulty.tuning.hasAsymmetricLanes {
+                Text("outer orbit runs faster than the inner one")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(model.difficulty.tint.opacity(0.8))
+            }
+        }
+    }
+}
+
+/// Just the four level pills. Scrolls rather than clipping on the narrowest phones.
+struct DifficultyRow: View {
+    @ObservedObject var model: GameModel
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Difficulty.allCases) { level in
+                    DifficultyPill(model: model, level: level)
+                }
+            }
+            .padding(.horizontal, 4)
+        }
+        .frame(maxWidth: 360)
+    }
+}
+
+struct DifficultyPill: View {
+    @ObservedObject var model: GameModel
+    let level: Difficulty
+
+    var body: some View {
+        let selected = model.difficulty == level
+        Button(action: { model.selectDifficulty(level) }) {
+            Text(level.name)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(selected ? .black : .white.opacity(0.6))
+                .padding(.horizontal, 11)
+                .padding(.vertical, 7)
+                .background(Capsule().fill(selected ? level.tint : Color.white.opacity(0.07)))
+                .overlay(Capsule().stroke(.white.opacity(selected ? 0 : 0.12), lineWidth: 1))
+                .shadow(color: selected ? level.tint.opacity(0.55) : .clear, radius: 8)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct StartOverButton: View {
+    let danger: Color
+    let onClick: () -> Void
+
+    var body: some View {
+        Button(action: onClick) {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.counterclockwise")
+                Text("START OVER")
+            }
+            .font(.system(size: 13, weight: .bold))
+            .foregroundColor(danger.opacity(0.95))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Capsule().fill(danger.opacity(0.13)))
+            .overlay(Capsule().stroke(danger.opacity(0.32), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// Confirmation gate for the irreversible wipe.
+struct ResetConfirm: View {
+    @ObservedObject var model: GameModel
+    let danger: Color
+    @Binding var isPresented: Bool
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.78)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture { isPresented = false }
+
+            VStack(spacing: 16) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 32))
+                    .foregroundColor(danger)
+
+                Text("START OVER?")
+                    .font(.system(size: 26, weight: .black))
+                    .foregroundColor(.white)
+
+                Text("This erases every best score, your \(model.emberBalance) banked embers, and every color, trail, sun theme, and starfield bought in the shop.\n\nThis can't be undone.")
+                    .multilineTextAlignment(.center)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white.opacity(0.7))
+
+                HStack(spacing: 12) {
+                    ConfirmButton(title: "CANCEL", color: .white.opacity(0.85), filled: false) {
+                        isPresented = false
+                    }
+                    ConfirmButton(title: "ERASE ALL", color: danger, filled: true) {
+                        model.resetProgress()
+                        isPresented = false
+                    }
+                }
+                .padding(.top, 4)
+            }
+            .padding(28)
+            .frame(maxWidth: 380)
+            .background(RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(Color(red: 0.02, green: 0.02, blue: 0.06)))
+            .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(.white.opacity(0.1), lineWidth: 1))
+            .padding(24)
+            .shadow(color: .black.opacity(0.6), radius: 30)
+        }
+        .transition(.opacity)
+    }
+}
+
+struct ConfirmButton: View {
+    let title: String
+    let color: Color
+    let filled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundColor(filled ? .black : color)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 11)
+                .background(Capsule().fill(filled ? color : Color.white.opacity(0.1)))
+                .overlay(Capsule().stroke(.white.opacity(filled ? 0 : 0.15), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 }
 

@@ -11,7 +11,7 @@ Paste-ready metadata for App Store Connect. Character limits noted in parenthese
 `One-tap solar orbit arcade`
 
 ## Promotional Text (170)
-> Unlock 6 comet colors and 5 trails as you chase your best score. One tap to leap between orbits. No ads. No in-app purchases. Just dive.
+> Now with 4 difficulty levels and pulse orbs to blast your way out of trouble. Unlock comet trails, sun themes, and starfields as you chase your best score. No ads, no IAP.
 
 ## Keywords (100, comma-separated, no spaces)
 `sundiver,orbit,arcade,one tap,reflex,space,endless,dodge,ring,high score,casual,comet,tap,twitch,sun`
@@ -25,9 +25,11 @@ One more run. Every time.
 
 FEATURES
 • One-tap controls — instantly playable, endlessly hard to master
+• 4 difficulty levels — Easy through Extreme, each with its own tuning and its own high score
+• Pulse orbs — bank a charge and blast the flare ahead of you when a dive gets too tight
 • Pure neon-on-black style — glowing comet trails, particle bursts, screen shake
 • 6 unlockable comet colors — earned by pushing your high score, from Comet Blue to the legendary Prism White
-• A shop — spend the embers you collect on 5 comet trails (Comet, Ion Ribbon, Plasma Pulse, Nova Spark, Spectrum)
+• An Ember Shop — spend the embers you collect on 5 comet trails, 5 sun themes, and 5 starfield themes
 • Shield embers — grab the rare white ember for a one-hit shield against the next flare
 • Two goals at once — score for prestige colors, embers for cosmetics
 • Play anywhere — iPhone and iPad, with your progress saved
@@ -35,6 +37,9 @@ FEATURES
 No ads. No in-app purchases. No tracking. Pay once, dive forever.
 
 How close can you get before the sun wins?
+
+## What's New (v1.1)
+`Choose your challenge with 4 difficulty levels, each with its own high score. Bank pulse orbs and blast a flare out of your path when a dive gets too tight. New sun and starfield themes to unlock in the redesigned Ember Shop.`
 
 ## What's New (v1.0)
 `Initial release. Tap in and chase your first high score.`
@@ -56,6 +61,11 @@ How close can you get before the sun wins?
 > (Settings → Pages → main → /docs). Same outstanding step as orbitor-game/plaingame.
 
 ## Screenshots
+> Pending re-capture for v1.1 — the menu, shop, and HUD were redesigned (difficulty
+> picker, pulse orb button, Ember Shop grid), so the existing PNGs in
+> `store/screenshots/appstore/` are stale and need to be replaced before this update
+> is submitted.
+
 Captured from simulators, then resized to the exact pixel sizes App Store Connect's
 screenshot uploader actually asks for on this account (no alpha channel, flattened):
 
